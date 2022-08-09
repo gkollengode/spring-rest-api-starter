@@ -1,0 +1,31 @@
+#!/usr/bin/env groovy
+
+pipeline {
+    agent any
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+    }
+    stages {
+      stage("Flyway") {
+        steps {
+          echo "${PWD}  ${env.buildDirectory}"
+          sh "pwd; ls -la"
+          flywayRunner {
+            name('flyway')
+            command('migrate')
+            url('jdbc:postgresql://acme1.clt9bfj9mjsq.us-east-1.rds.amazonaws.com:5432/postgres')
+            locations('src/main/resources/liquibase')
+            credentialsId('Postgres-DataLoad')
+          }
+        }
+      }
+      stage('DB Update') {
+
+        steps {
+          liquibaseUpdate changeLogFile: 'src/main/resources/liquibase/changelog-master.xml', url: 'jdbc:postgresql://acme1.clt9bfj9mjsq.us-east-1.rds.amazonaws.com:5432/postgres', credentialsId: 'Postgres-DataLoad', databaseEngine: 'Postgres'
+        }
+      }
+
+    }
+
+}

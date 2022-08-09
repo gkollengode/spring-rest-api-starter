@@ -1,0 +1,143 @@
+version: '2.3'
+
+networks:
+  app_external_network:
+  app_internal_network:
+    internal: true
+
+services:
+  app_backend:
+    build:
+      context: ./
+      dockerfile: ${DOCKERFILE_PATH}
+      args:
+        - VERSION=${TAG}
+        - VCS_REF=${VCS_REF}
+        - BUILD_DATE=${BUILD_DATE}
+    image: ${IMAGE_NAME}
+    container_name: app_backend
+    # [TODO] Enable auto-restart when production-ready
+    #restart: always
+    healthcheck:
+      test: CMD curl -v --silent http://localhost:${APP_SERVER_PORT}/${APP_SERVER_CONTEXT_PATH}/health 2>&1 | grep UP
+    ports:
+      - "8080:${APP_SERVER_PORT}"
+    networks:
+      - app_internal_network
+      - app_external_network
+    depends_on:
+      app_db:
+        condition: service_healthy
+      app_mailer:
+        condition: service_started
+    volumes:
+      - ${APP_HOME}_mariadb/back/logs:/srv/app/logs
+      - ${APP_HOME}_mariadb/back/keys:/srv/app/keys
+      - ${APP_HOME}_mariadb/back/config:/srv/app/config
+      - ${APP_HOME}_mariadb/back/data:/srv/app/data
+      # If you want, you can sync time & timezone with host
+      #- /etc/localtime:/etc/localtime:ro
+      #- /etc/timezone:/etc/timezone:ro
+    environment:
+      # Application configuration
+      - APP_SERVER_PORT=${APP_SERVER_PORT}
+      - APP_SERVER_CONTEXT_PATH=/${APP_SERVER_CONTEXT_PATH}
+      - APP_TITLE=${APP_TITLE}
+      - APP_DOMAIN_NAME=${APP_DOMAIN_NAME}
+      - APP_ADMIN_PASSWORD=${APP_ADMIN_PASSWORD}
+      - APP_SIGNING_KEY=
+      - APP_SIGNING_KEYPAIR_PASS=${APP_SIGNING_KEYPAIR_PASS}
+      - APP_DEMO_DATA=true
+      # Database configuration (MariaDB only)
+      - DB_PLATFORM=mariadb
+      - DB_HOST=app_db
+      - DB_PORT=3306
+      - DB_NAME=${APP_DB_NAME}
+      - DB_USER=${APP_DB_USER}
+      - DB_PASSWORD=${APP_DB_PASSWORD}
+      # Mail configuration
+      - MAIL_HOST=app_mailer
+      - MAIL_PORT=1025
+      - MAIL_PROTOCOL=smtp
+      - MAIL_USER=${APP_SMTP_USER}
+      - MAIL_PASSWORD=${APP_SMTP_PASSWD}
+      - MAIL_SSL=false
+      - MAIL_STARTTLS=false
+      # Wait for it...
+      - WAIT_FOR=app_db:3306
+
+  app_db:
+    image: mariadb:10
+    container_name: app_db
+    command: --character_set_client=utf8 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --character-set-client-handshake=FALSE
+    # [TODO] Enable auto-restart when production-ready
+    #restart: always
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 10s
+      retries: 5
+    expose:
+      - '3306'
+    #ports:
+    #  - "3306:3306"
+    networks:
+      - app_internal_network
+    volumes:
+      - ${APP_HOME}_mariadb/db/data:/var/lib/mysql
+      # If you want, you can sync time & timezone with host
+      #- /etc/localtime:/etc/localtime:ro
+      #- /etc/timezone:/etc/timezone:ro
+    environment:
+      - MYSQL_ALLOW_EMPTY_PASSWORD=1
+      - MYSQL_DATABASE=${APP_DB_NAME}
+      - MYSQL_USER=${APP_DB_USER}
+      - MYSQL_PASSWORD=${APP_DB_PASSWORD}
+
+# You can also add a web server (like NGinx or Apache) to serve as reverse proxy and enforce HTTPS
+
+  # Test services (do not use in production)
+
+  # https://docs.docker.com/docker-hub/builds/automated-testing/
+  sut:
+    build:
+      context: ./docker/test
+      dockerfile: Dockerfile
+      args:
+        - VERSION=${TAG}
+        - VCS_REF=${VCS_REF}
+        - BUILD_DATE=${BUILD_DATE}
+    command: sh /docker_test.sh
+    networks:
+      - app_internal_network
+      - app_external_network
+    depends_on:
+      app_backend:
+        condition: service_started
+    environment:
+      - DOCKER_TEST_CONTAINER=app_backend
+      - DOCKER_WEB_CONTAINER=app_backend
+      - DOCKER_WEB_PORT=${APP_SERVER_PORT}
+      - DOCKER_WEB_HEALTH_API=${APP_SERVER_CONTEXT_PATH}/health
+    volumes_from:
+      - app_backend
+    # If you want, you can sync time & timezone with host
+    #volumes:
+    #  - /etc/localtime:/etc/localtime:ro
+    #  - /etc/timezone:/etc/timezone:ro
+
+  app_mailer:
+    image: sj26/mailcatcher:latest
+    hostname: app_mailer
+    container_name: app_mailer
+    restart: always
+    expose:
+      - '1025'
+    ports:
+      - "1080:1080"
+    networks:
+      - app_internal_network
+      - app_external_network
+    # If you want, you can sync time & timezone with host
+    #volumes:
+    #  - /etc/localtime:/etc/localtime:ro
+    #  - /etc/timezone:/etc/timezone:ro
