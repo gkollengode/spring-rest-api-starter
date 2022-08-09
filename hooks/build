@@ -1,0 +1,15 @@
+#!/bin/bash
+
+# See documentation for details:
+# https://docs.docker.com/docker-hub/builds/advanced/
+# https://microbadger.com/labels
+
+docker build \
+    --build-arg "VCS_REF=${SOURCE_COMMIT}" \
+    --build-arg "BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+    --build-arg "TAG=${DOCKER_TAG}" \
+    --build-arg "MAVEN_PROFILE=${MAVEN_PROFILE}" \
+    --build-arg "PACKAGE_REPO_LOGIN=${PACKAGE_REPO_LOGIN}" \
+    --build-arg "PACKAGE_REPO_PASSWORD=${PACKAGE_REPO_PASSWORD}" \
+    -f "$DOCKERFILE_PATH" \
+    -t "$IMAGE_NAME" .

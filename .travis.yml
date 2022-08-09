@@ -1,0 +1,41 @@
+os: linux
+dist: trusty
+
+services: docker
+
+language: java
+
+branches:
+  only:
+    - master
+
+jdk:
+  - oraclejdk11
+
+before_install:
+  - env | sort
+  - export DOCKER_REPO="monogramm/spring-rest-api-starter"
+
+install:
+  # Execute CI build hooks
+  # TODO Mount local dir as volume to retrieve test results (-v "$(pwd)":/usr/src/app)
+  - ./hooks/run build "${VARIANT}"
+
+before_script:
+  # Display docker images
+  - docker images
+
+script:
+    # Execute CI test hooks
+    - ./hooks/run test "${VARIANT}"
+
+after_success:
+  # TODO Send test coverage report to CodeCov
+  - bash <(curl -s https://codecov.io/bash)
+
+#jobs:
+#  allow_failures:
+#    - env: DATABASE=h2
+
+env: # Environments
+  - VARIANT=alpine
